@@ -278,19 +278,33 @@ def add_bidirectional(edges: list[dict[str, Any]], src_type: str, src: int, rel:
     edges.append({"source_type": dst_type, "source": dst, "relation": f"rev_{rel}", "target_type": src_type, "target": src, "weight": weight})
 
 
+def resolve_sources(args: argparse.Namespace) -> dict[str, Path]:
+    data_dir = args.data_dir
+    return {
+        "stations": args.stations_csv or data_dir / "metro_stations" / "shanghai_metro_stations_amap.csv",
+        "buildings": args.buildings_csv or data_dir / "historic_buildings" / "shanghai_excellent_historic_buildings_points.csv",
+        "conservation": args.conservation_geojson
+        or data_dir / "historic_conservation_areas" / "上海中心城区12片历史文化风貌区_保护边界_面积校准拟合.geojson",
+        "admin": args.admin_geojson or data_dir / "admin_boundary" / "shanghai_admin_boundary.geojson",
+        "roads": args.roads_csv or data_dir / "road_segments" / "shanghai_road_segments.csv",
+        "poi": args.poi_csv or data_dir / "poi" / "2026_poi_Shanghai.csv",
+    }
+
+
 def build_graph(args: argparse.Namespace) -> dict[str, Any]:
-    data_dir = ROOT / "data"
-    stations = load_stations(data_dir / "metro_stations" / "shanghai_metro_stations_amap.csv")
+    sources = resolve_sources(args)
+    for label, path in sources.items():
+        if not path.exists():
+            raise FileNotFoundError(f"{label} source not found: {path}")
+
+    stations = load_stations(sources["stations"])
     station_xy = stations[["x", "y"]].to_numpy()
     station_tree = cKDTree(station_xy)
-    buildings = load_buildings(data_dir / "historic_buildings" / "shanghai_excellent_historic_buildings_points.csv")
-    conservation = load_areas(
-        data_dir / "historic_conservation_areas" / "上海中心城区12片历史文化风貌区_保护边界_面积校准拟合.geojson",
-        "conservation_area",
-    )
-    admin = load_areas(data_dir / "admin_boundary" / "shanghai_admin_boundary.geojson", "admin_area")
-    roads = load_roads(data_dir / "road_segments" / "shanghai_road_segments.csv", station_xy, args.radius_m)
-    pois = load_pois(data_dir / "poi" / "2026_poi_Shanghai.csv", station_xy, args.radius_m, args.max_poi_per_station_group)
+    buildings = load_buildings(sources["buildings"])
+    conservation = load_areas(sources["conservation"], "conservation_area")
+    admin = load_areas(sources["admin"], "admin_area")
+    roads = load_roads(sources["roads"], station_xy, args.radius_m)
+    pois = load_pois(sources["poi"], station_xy, args.radius_m, args.max_poi_per_station_group)
 
     all_x = np.concatenate(
         [
@@ -517,6 +531,7 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
             "edge_counts": edge_df.groupby(["source_type", "relation", "target_type"]).size().to_dict(),
             "total_edges": int(len(edge_df)),
             "crs": "EPSG:3857 features from WGS84/GCJ02-normalized source coordinates",
+            "sources": {k: str(v) for k, v in sources.items()},
         },
     }
 
@@ -539,9 +554,16 @@ def save_outputs(payload: dict[str, Any], output_dir: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build station-centered heterogeneous graph for HGT.")
+    parser.add_argument("--data-dir", type=Path, default=ROOT / "data", help="Base data directory for default source paths.")
+    parser.add_argument("--stations-csv", type=Path, default=None, help="Override metro stations CSV source.")
+    parser.add_argument("--buildings-csv", type=Path, default=None, help="Override historic buildings CSV source.")
+    parser.add_argument("--conservation-geojson", type=Path, default=None, help="Override conservation areas GeoJSON source.")
+    parser.add_argument("--admin-geojson", type=Path, default=None, help="Override administrative areas GeoJSON source.")
+    parser.add_argument("--roads-csv", type=Path, default=None, help="Override road segments CSV source.")
+    parser.add_argument("--poi-csv", type=Path, default=None, help="Override POI CSV source.")
     parser.add_argument("--radius-m", type=float, default=2560.0, help="Station context radius; 512px * 10m / 2 by default.")
     parser.add_argument("--max-poi-per-station-group", type=int, default=120, help="Nearest POI cap per station and POI group.")
-    parser.add_argument("--output-dir", type=Path, default=ROOT / "data" / "hgt_graph")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / "outputs" / "preprocess" / "hgt_graph")
     return parser.parse_args()
 
 
