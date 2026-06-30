@@ -1,0 +1,1007 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>日常-旅游混合冲突潜势 | 武康路原型研究</title>
+  <style>
+    :root {
+      --ink: #171717;
+      --muted: #74706a;
+      --paper: #f6f1e8;
+      --soft: #ebe3d6;
+      --line: rgba(23, 23, 23, 0.16);
+      --accent: #b84a36;
+      --accent-2: #2e6f68;
+      --deep: #24322f;
+      --night: #111817;
+      --white: #fffaf2;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    body {
+      letter-spacing: 0;
+    }
+
+    .deck {
+      width: 100vw;
+      height: 100svh;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: clamp(34px, 5vw, 78px);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 28px;
+      opacity: 0;
+      transform: translateX(38px) scale(0.985);
+      pointer-events: none;
+      transition: opacity 420ms ease, transform 520ms cubic-bezier(.2, .8, .2, 1);
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+      pointer-events: auto;
+      z-index: 2;
+    }
+
+    .slide.previous {
+      transform: translateX(-30px) scale(0.985);
+    }
+
+    .slide.dark {
+      background: var(--night);
+      color: var(--white);
+    }
+
+    .slide.warm {
+      background:
+        radial-gradient(circle at 80% 20%, rgba(184, 74, 54, 0.14), transparent 34%),
+        linear-gradient(135deg, #fbf5e8 0%, #efe4d2 100%);
+    }
+
+    .slide.deep {
+      background:
+        linear-gradient(90deg, rgba(17, 24, 23, 0.90), rgba(17, 24, 23, 0.66)),
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 120px),
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 88px),
+        var(--night);
+      color: var(--white);
+    }
+
+    .eyebrow {
+      margin: 0 0 18px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .dark .eyebrow,
+    .deep .eyebrow {
+      color: #f2a28f;
+    }
+
+    h1,
+    h2 {
+      margin: 0;
+      max-width: 980px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 500;
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      font-size: clamp(50px, 8.2vw, 118px);
+    }
+
+    h2 {
+      font-size: clamp(42px, 6vw, 86px);
+    }
+
+    h3 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 38px);
+      line-height: 1.1;
+      font-weight: 750;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: clamp(17px, 1.7vw, 24px);
+      line-height: 1.45;
+      max-width: 780px;
+    }
+
+    .dark p,
+    .deep p {
+      color: rgba(255, 250, 242, 0.72);
+    }
+
+    .topline,
+    .foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+
+    .dark .topline,
+    .dark .foot,
+    .deep .topline,
+    .deep .foot {
+      color: rgba(255, 250, 242, 0.52);
+    }
+
+    .content {
+      display: grid;
+      align-items: center;
+      gap: clamp(28px, 4vw, 64px);
+    }
+
+    .two-col {
+      grid-template-columns: minmax(0, 1fr) minmax(360px, 0.88fr);
+    }
+
+    .hero-layout {
+      grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.82fr);
+    }
+
+    .big-copy {
+      font-size: clamp(24px, 3vw, 42px);
+      line-height: 1.22;
+      max-width: 930px;
+      color: var(--ink);
+      font-weight: 650;
+    }
+
+    .dark .big-copy,
+    .deep .big-copy {
+      color: var(--white);
+    }
+
+    .title-stack {
+      align-self: end;
+    }
+
+    .title-stack p {
+      margin-top: 28px;
+      max-width: 680px;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 34px;
+    }
+
+    .chip {
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      padding: 8px 13px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .dark .chip,
+    .deep .chip {
+      color: rgba(255, 250, 242, 0.68);
+    }
+
+    .map-plane {
+      position: relative;
+      min-height: 520px;
+      border-left: 1px solid var(--line);
+      overflow: hidden;
+    }
+
+    .dark .map-plane,
+    .deep .map-plane {
+      border-left-color: rgba(255,255,255,0.14);
+    }
+
+    .river {
+      position: absolute;
+      width: 44%;
+      height: 145%;
+      right: -10%;
+      top: -20%;
+      background: rgba(46, 111, 104, 0.18);
+      transform: rotate(11deg);
+      border-radius: 48% 52% 45% 55%;
+    }
+
+    .deep .river,
+    .dark .river {
+      background: rgba(107, 189, 178, 0.20);
+    }
+
+    .district {
+      position: absolute;
+      left: 18%;
+      top: 17%;
+      width: 50%;
+      height: 58%;
+      border: 2px solid rgba(184, 74, 54, 0.76);
+      background: rgba(184, 74, 54, 0.10);
+      clip-path: polygon(16% 9%, 78% 3%, 95% 28%, 84% 84%, 42% 94%, 8% 66%);
+    }
+
+    .road {
+      position: absolute;
+      left: 39%;
+      top: 18%;
+      width: 7px;
+      height: 57%;
+      background: var(--accent);
+      border-radius: 999px;
+      transform: rotate(17deg);
+      box-shadow: 0 0 0 8px rgba(184, 74, 54, 0.12);
+    }
+
+    .road::before,
+    .road::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      width: 126px;
+      height: 2px;
+      background: rgba(23,23,23,0.32);
+      transform: translateX(-50%) rotate(-17deg);
+    }
+
+    .road::before {
+      top: 0;
+    }
+
+    .road::after {
+      bottom: 0;
+    }
+
+    .deep .road::before,
+    .deep .road::after,
+    .dark .road::before,
+    .dark .road::after {
+      background: rgba(255,255,255,0.26);
+    }
+
+    .station {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--accent-2);
+      border-radius: 50%;
+      background: var(--paper);
+    }
+
+    .deep .station,
+    .dark .station {
+      background: var(--night);
+      border-color: #73c1b6;
+    }
+
+    .s1 { left: 31%; top: 18%; }
+    .s2 { left: 54%; top: 50%; }
+    .s3 { left: 47%; top: 74%; }
+    .s4 { left: 63%; top: 78%; }
+
+    .map-label {
+      position: absolute;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    .deep .map-label,
+    .dark .map-label {
+      color: rgba(255, 250, 242, 0.64);
+    }
+
+    .l-road { left: 29%; top: 48%; color: var(--accent); }
+    .l-district { left: 17%; top: 12%; }
+    .l-station1 { left: 19%; top: 14%; }
+    .l-station2 { left: 57%; top: 47%; }
+    .l-station3 { left: 35%; top: 75%; }
+
+    .axis {
+      display: grid;
+      gap: 18px;
+      max-width: 1040px;
+    }
+
+    .axis-row {
+      display: grid;
+      grid-template-columns: 210px 1fr;
+      gap: 24px;
+      align-items: center;
+      padding: 18px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .axis-row:last-child {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .axis strong {
+      font-size: clamp(19px, 2vw, 28px);
+      line-height: 1.15;
+    }
+
+    .axis span {
+      color: var(--muted);
+      font-size: clamp(16px, 1.5vw, 21px);
+      line-height: 1.4;
+    }
+
+    .deep .axis-row,
+    .dark .axis-row {
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    .deep .axis span,
+    .dark .axis span {
+      color: rgba(255, 250, 242, 0.68);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .flow-step {
+      min-height: 172px;
+      padding: 22px 18px;
+      border-top: 3px solid var(--accent);
+      background: rgba(255,255,255,0.34);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .flow-step b {
+      font-size: 15px;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .flow-step strong {
+      font-size: clamp(20px, 2vw, 29px);
+      line-height: 1.05;
+    }
+
+    .flow-step span {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .formula {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 36px;
+    }
+
+    .factor {
+      min-height: 188px;
+      padding: 24px 20px;
+      background: var(--soft);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .factor::after {
+      content: "×";
+      position: absolute;
+      right: 18px;
+      top: 10px;
+      color: rgba(23,23,23,0.15);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 72px;
+      line-height: 1;
+    }
+
+    .factor:last-child::after {
+      content: "=";
+    }
+
+    .factor b {
+      font-size: 13px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .factor strong {
+      font-size: clamp(23px, 2.4vw, 36px);
+      line-height: 1.05;
+    }
+
+    .factor span {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .result-wall {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 44px;
+      align-items: center;
+    }
+
+    .segment-map {
+      position: relative;
+      height: min(58svh, 560px);
+      min-height: 430px;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 84px 84px;
+      border-top: 1px solid rgba(255,255,255,0.16);
+      border-bottom: 1px solid rgba(255,255,255,0.16);
+      overflow: hidden;
+    }
+
+    .segment {
+      position: absolute;
+      height: 10px;
+      border-radius: 999px;
+      transform-origin: left center;
+      background: rgba(255,250,242,0.25);
+    }
+
+    .hot { background: #f26f55; box-shadow: 0 0 28px rgba(242,111,85,0.42); }
+    .med { background: #d5b95e; }
+    .cool { background: #73c1b6; }
+
+    .seg-a { width: 46%; left: 17%; top: 25%; transform: rotate(-8deg); }
+    .seg-b { width: 42%; left: 34%; top: 42%; transform: rotate(24deg); }
+    .seg-c { width: 38%; left: 22%; top: 62%; transform: rotate(-28deg); }
+    .seg-d { width: 28%; left: 57%; top: 68%; transform: rotate(-3deg); }
+    .seg-e { width: 30%; left: 12%; top: 78%; transform: rotate(17deg); }
+
+    .dot {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #f26f55;
+    }
+
+    .dot.one { left: 47%; top: 38%; }
+    .dot.two { left: 37%; top: 58%; }
+    .dot.three { left: 62%; top: 66%; }
+
+    .strategy {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 22px;
+    }
+
+    .strategy-item {
+      min-height: 260px;
+      padding: 26px 0;
+      border-top: 2px solid var(--accent);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .strategy-item b {
+      display: block;
+      color: var(--accent);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 20px;
+    }
+
+    .strategy-item strong {
+      display: block;
+      font-size: clamp(24px, 2.8vw, 40px);
+      line-height: 1.02;
+      margin-bottom: 22px;
+    }
+
+    .strategy-item span {
+      color: var(--muted);
+      font-size: clamp(16px, 1.5vw, 20px);
+      line-height: 1.42;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      align-items: end;
+      gap: 0;
+      margin-top: 46px;
+      border-bottom: 1px solid rgba(255,255,255,0.22);
+    }
+
+    .phase {
+      min-height: 310px;
+      padding: 0 26px 26px;
+      border-left: 1px solid rgba(255,255,255,0.17);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 16px;
+    }
+
+    .phase:first-child {
+      border-left: none;
+    }
+
+    .phase b {
+      color: #f2a28f;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .phase strong {
+      font-size: clamp(23px, 2.4vw, 34px);
+      line-height: 1.05;
+    }
+
+    .phase span {
+      color: rgba(255,250,242,0.66);
+      font-size: 15px;
+      line-height: 1.38;
+    }
+
+    .controls {
+      position: fixed;
+      right: 28px;
+      bottom: 24px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    button {
+      width: 40px;
+      height: 40px;
+      border: 1px solid rgba(23,23,23,0.18);
+      border-radius: 999px;
+      background: rgba(255,250,242,0.72);
+      color: var(--ink);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      transition: transform 180ms ease, background 180ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      background: var(--white);
+    }
+
+    .progress {
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 4px;
+      background: var(--accent);
+      width: 14.285%;
+      z-index: 20;
+      transition: width 320ms ease;
+    }
+
+    @media (max-width: 880px) {
+      body {
+        overflow: auto;
+      }
+
+      .deck {
+        height: auto;
+        overflow: visible;
+      }
+
+      .slide {
+        position: relative;
+        min-height: 100svh;
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+
+      .two-col,
+      .hero-layout,
+      .result-wall {
+        grid-template-columns: 1fr;
+      }
+
+      .map-plane {
+        min-height: 360px;
+        border-left: none;
+        border-top: 1px solid var(--line);
+      }
+
+      .flow,
+      .formula,
+      .strategy,
+      .timeline {
+        grid-template-columns: 1fr;
+      }
+
+      .axis-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .controls,
+      .progress {
+        display: none;
+      }
+    }
+
+    @media print {
+      html,
+      body {
+        overflow: visible;
+        background: white;
+      }
+
+      .deck {
+        height: auto;
+        overflow: visible;
+      }
+
+      .slide {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        page-break-after: always;
+        opacity: 1;
+        transform: none;
+      }
+
+      .controls,
+      .progress {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <main class="deck" aria-label="武康路研究原型演示文稿">
+    <section class="slide deep active">
+      <div class="topline">
+        <span>DigitalFUTURES 2026 · 工作坊原型研究</span>
+        <span>01 / 07</span>
+      </div>
+      <div class="content hero-layout">
+        <div class="title-stack">
+          <p class="eyebrow">上海 · 武康路</p>
+          <h1>日常-旅游混合冲突潜势</h1>
+          <p>一个轻量级数据原型，用来识别居民日常、旅游消费、地铁客流和历史风貌敏感性在哪里叠加。</p>
+          <div class="meta-row">
+            <span class="chip">街段尺度</span>
+            <span class="chip">原型指数</span>
+            <span class="chip">未来 GNN</span>
+          </div>
+        </div>
+        <div class="map-plane" aria-hidden="true">
+          <div class="river"></div>
+          <div class="district"></div>
+          <div class="road"></div>
+          <div class="station s1"></div>
+          <div class="station s2"></div>
+          <div class="station s3"></div>
+          <div class="station s4"></div>
+          <span class="map-label l-district">衡山路-复兴路风貌区</span>
+          <span class="map-label l-road">武康路</span>
+          <span class="map-label l-station1">交通大学站</span>
+          <span class="map-label l-station2">上海图书馆站</span>
+          <span class="map-label l-station3">衡山路站</span>
+        </div>
+      </div>
+      <div class="foot">
+        <span>案例：上海武康路</span>
+        <span>使用方向键切换</span>
+      </div>
+    </section>
+
+    <section class="slide warm">
+      <div class="topline">
+        <span>问题框架</span>
+        <span>02 / 07</span>
+      </div>
+      <div class="content">
+        <div>
+          <p class="eyebrow">从历史保护街区到日常-旅游界面</p>
+          <h2>历史风貌街区正在同时承载生活、消费、打卡和交通导入。</h2>
+        </div>
+        <div class="axis">
+          <div class="axis-row">
+            <strong>居民日常</strong>
+            <span>社区服务、居住功能、日常通行和稳定的生活节奏。</span>
+          </div>
+          <div class="axis-row">
+            <strong>旅游消费</strong>
+            <span>城市漫步、咖啡餐饮、历史建筑观看和社交媒体驱动的停留。</span>
+          </div>
+          <div class="axis-row">
+            <strong>轨道可达</strong>
+            <span>地铁站点客流将更大范围的人群快速导入历史街区。</span>
+          </div>
+          <div class="axis-row">
+            <strong>风貌敏感</strong>
+            <span>风貌保护要求使街道更新不能只按商业效率或交通效率处理。</span>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <span>核心问题：这些力量在哪里叠加？</span>
+        <span>02</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="topline">
+        <span>案例场地</span>
+        <span>03 / 07</span>
+      </div>
+      <div class="content two-col">
+        <div>
+          <p class="eyebrow">为什么是武康路</p>
+          <h2>一个适合做原型研究的高压缩案例。</h2>
+          <p style="margin-top:28px;">武康路位于衡山路-复兴路历史文化风貌区内，连接华山路与淮海中路，同时具备历史风貌、居民生活、社交媒体旅游和地铁可达性。</p>
+        </div>
+        <div class="map-plane" aria-hidden="true">
+          <div class="district"></div>
+          <div class="road"></div>
+          <div class="station s1"></div>
+          <div class="station s2"></div>
+          <div class="station s3"></div>
+          <span class="map-label l-district">历史风貌区边界</span>
+          <span class="map-label l-road">风貌保护道路</span>
+          <span class="map-label l-station1">地铁客流导入</span>
+          <span class="map-label l-station2">地铁客流导入</span>
+          <span class="map-label l-station3">地铁客流导入</span>
+        </div>
+      </div>
+      <div class="foot">
+        <span>场地逻辑：风貌 + 日常 + 旅游 + 地铁</span>
+        <span>03</span>
+      </div>
+    </section>
+
+    <section class="slide warm">
+      <div class="topline">
+        <span>数据框架</span>
+        <span>04 / 07</span>
+      </div>
+      <div class="content">
+        <div>
+          <p class="eyebrow">工作坊阶段已经够用的数据结构</p>
+          <h2>把多源数据压成街段级判断。</h2>
+        </div>
+        <div class="flow">
+          <div class="flow-step">
+            <b>01</b>
+            <strong>道路网</strong>
+            <span>以街段作为空间分析单元。</span>
+          </div>
+          <div class="flow-step">
+            <b>02</b>
+            <strong>POI 功能分类</strong>
+            <span>区分日常服务、绅士化消费和旅游专属功能。</span>
+          </div>
+          <div class="flow-step">
+            <b>03</b>
+            <strong>地铁客流</strong>
+            <span>使用站点进出站客流判断轨道导入压力。</span>
+          </div>
+          <div class="flow-step">
+            <b>04</b>
+            <strong>历史风貌</strong>
+            <span>使用风貌区边界和风貌保护道路判断保护敏感性。</span>
+          </div>
+          <div class="flow-step">
+            <b>05</b>
+            <strong>冲突潜势</strong>
+            <span>先做可解释评分，识别可能出现压力的位置。</span>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <span>当前阶段：可解释原型，不是最终预测模型</span>
+        <span>04</span>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="topline">
+        <span>原型指数</span>
+        <span>05 / 07</span>
+      </div>
+      <div class="content">
+        <div>
+          <p class="eyebrow">足够轻量，也足够说得清楚</p>
+          <h2>冲突潜势 = 四类压力的叠加。</h2>
+          <p style="margin-top:28px;">现阶段使用规则型、可解释的指数。它不是完整预测模型，而是先识别可能产生压力的街段。</p>
+        </div>
+        <div class="formula">
+          <div class="factor">
+            <b>日常</b>
+            <strong>居民日常</strong>
+            <span>居住服务型 POI 密度。</span>
+          </div>
+          <div class="factor">
+            <b>旅游</b>
+            <strong>消费吸引</strong>
+            <span>绅士化消费与旅游专属点位。</span>
+          </div>
+          <div class="factor">
+            <b>地铁</b>
+            <strong>客流压力</strong>
+            <span>地铁进出站客流与距离衰减。</span>
+          </div>
+          <div class="factor">
+            <b>风貌</b>
+            <strong>风貌敏感</strong>
+            <span>历史风貌区与风貌保护道路。</span>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <span>公式：日常 × 旅游 × 地铁 × 风貌</span>
+        <span>05</span>
+      </div>
+    </section>
+
+    <section class="slide deep">
+      <div class="topline">
+        <span>预期输出</span>
+        <span>06 / 07</span>
+      </div>
+      <div class="content result-wall">
+        <div class="segment-map" aria-hidden="true">
+          <div class="segment cool seg-a"></div>
+          <div class="segment hot seg-b"></div>
+          <div class="segment med seg-c"></div>
+          <div class="segment hot seg-d"></div>
+          <div class="segment cool seg-e"></div>
+          <div class="dot one"></div>
+          <div class="dot two"></div>
+          <div class="dot three"></div>
+        </div>
+        <div>
+          <p class="eyebrow">明天展示什么</p>
+          <h2>从分数转译为空间判断。</h2>
+          <p style="margin-top:28px;">输出不只是排名。它要指出潜在高冲突街段，并解释哪里适合分流、缓冲或微更新。</p>
+        </div>
+      </div>
+      <div class="foot">
+        <span>地图表达的是潜势，不代表绝对结论</span>
+        <span>06</span>
+      </div>
+    </section>
+
+    <section class="slide warm">
+      <div class="topline">
+        <span>空间策略与未来工作</span>
+        <span>07 / 07</span>
+      </div>
+      <div class="content">
+        <div>
+          <p class="eyebrow">如何把原型推进成更完整的研究</p>
+          <h2>先画出可行框架，再升级成异质图学习。</h2>
+        </div>
+        <div class="strategy">
+          <div class="strategy-item">
+            <b>策略 01</b>
+            <strong>游客引导</strong>
+            <span>把高停留人群从居民生活段引导到更能承载的节点和路径。</span>
+          </div>
+          <div class="strategy-item">
+            <b>策略 02</b>
+            <strong>日常缓冲</strong>
+            <span>识别需要保护日常通行、社区服务和安静界面的街段。</span>
+          </div>
+          <div class="strategy-item">
+            <b>策略 03</b>
+            <strong>GNN 模型升级</strong>
+            <span>未来将地铁站点、街段、POI、历史风貌和街景图像连接为异质图。</span>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <span>下一步：从原型指数到异质图学习</span>
+        <span>07</span>
+      </div>
+    </section>
+  </main>
+
+  <nav class="controls" aria-label="幻灯片控制">
+    <button id="prev" aria-label="上一页">‹</button>
+    <span id="counter">01 / 07</span>
+    <button id="next" aria-label="下一页">›</button>
+  </nav>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    const counter = document.getElementById("counter");
+    const progress = document.getElementById("progress");
+    const prevButton = document.getElementById("prev");
+    const nextButton = document.getElementById("next");
+    let index = 0;
+
+    function showSlide(nextIndex) {
+      index = Math.max(0, Math.min(slides.length - 1, nextIndex));
+      slides.forEach((slide, i) => {
+        slide.classList.toggle("active", i === index);
+        slide.classList.toggle("previous", i < index);
+      });
+      counter.textContent = `${String(index + 1).padStart(2, "0")} / ${String(slides.length).padStart(2, "0")}`;
+      progress.style.width = `${((index + 1) / slides.length) * 100}%`;
+    }
+
+    prevButton.addEventListener("click", () => showSlide(index - 1));
+    nextButton.addEventListener("click", () => showSlide(index + 1));
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+        event.preventDefault();
+        showSlide(index + 1);
+      }
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        showSlide(index - 1);
+      }
+      if (event.key === "Home") showSlide(0);
+      if (event.key === "End") showSlide(slides.length - 1);
+    });
+
+    showSlide(0);
+  </script>
+</body>
+</html>
