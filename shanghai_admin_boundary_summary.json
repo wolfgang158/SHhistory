@@ -1,0 +1,24 @@
+{
+  "source": "data/raw/shanghai-260629.osm.pbf",
+  "method": "pyrosm.get_boundaries(boundary_type='all') then boundary == administrative",
+  "admin_boundary_count": 389,
+  "shanghai_city_boundary_count": 2,
+  "county_boundary_count_admin_level_6": 14,
+  "street_boundary_level_used": "10",
+  "street_boundary_count": 158,
+  "admin_level_counts": {
+    "10": 158,
+    "4": 1,
+    "6": 14,
+    "7": 4,
+    "8": 207,
+    "9": 4,
+    "unknown": 1
+  },
+  "outputs": {
+    "admin_gpkg": "data/osm/shanghai_admin_boundary.gpkg",
+    "admin_geojson": "data/osm/shanghai_admin_boundary.geojson",
+    "admin_csv": "data/osm/shanghai_admin_boundary.csv",
+    "street_gpkg": "data/osm/shanghai_street_boundary.gpkg"
+  }
+}
