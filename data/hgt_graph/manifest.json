@@ -1,0 +1,34 @@
+{
+  "radius_m": 2560.0,
+  "feature_dim": 16,
+  "node_counts": {
+    "station": 537,
+    "building": 1071,
+    "road": 98402,
+    "poi": 185822,
+    "conservation_area": 12,
+    "admin_area": 389
+  },
+  "edge_counts": {
+    "admin_area|rev_inside_admin|station": 1012,
+    "building|inside_conservation|conservation_area": 534,
+    "building|rev_near_building|station": 13071,
+    "conservation_area|rev_inside_conservation|building": 534,
+    "conservation_area|rev_inside_conservation|station": 26,
+    "poi|rev_near_poi_daily|station": 414123,
+    "poi|rev_near_poi_other|station": 226481,
+    "poi|rev_near_poi_tour|station": 301488,
+    "poi|rev_near_poi_transport|station": 284803,
+    "road|rev_near_road|station": 467203,
+    "station|inside_admin|admin_area": 1012,
+    "station|inside_conservation|conservation_area": 26,
+    "station|near_building|building": 13071,
+    "station|near_poi_daily|poi": 414123,
+    "station|near_poi_other|poi": 226481,
+    "station|near_poi_tour|poi": 301488,
+    "station|near_poi_transport|poi": 284803,
+    "station|near_road|road": 467203
+  },
+  "total_edges": 3417482,
+  "crs": "EPSG:3857 features from WGS84/GCJ02-normalized source coordinates"
+}
