@@ -1,0 +1,64 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Package / build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Logs
+*.log
+
+# Model checkpoints and training outputs
+checkpoints/
+checkpoint/
+outputs/
+output/
+runs/
+wandb/
+lightning_logs/
+*.pt
+*.pth
+*.ckpt
+
+# Project-specific generated data and caches
+data/raw/
+data/cache/
+data/tmp/
+data/intermediate/
+data/runtime.log
+
+# Keep generated geospatial intermediates out unless explicitly committed
+*.gpkg~
+*.geojson~
+*.csv~
+
