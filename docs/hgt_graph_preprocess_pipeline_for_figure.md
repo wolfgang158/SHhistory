@@ -34,12 +34,12 @@ Metro-station-centered heterogeneous spatial graph preprocessing: multi-source u
 
 | 图中标签 | 文件路径 | 几何/表格类型 | 作用 |
 | --- | --- | --- | --- |
-| Metro stations | `data/metro_stations/shanghai_metro_stations_amap.csv` | point table, GCJ-02 coordinates | 样本中心锚点，共 537 个站点 |
-| Historic buildings | `data/historic_buildings/shanghai_excellent_historic_buildings_points.csv` | point table, WGS84-like lon/lat | 历史建筑节点，共 1071 个 |
-| Road segments | `data/road_segments/shanghai_road_segments.csv` | WKT LineString | 道路节点，按站点邻域粗筛后保留 |
-| POIs 2026 | `data/poi/2026_poi_Shanghai.csv` | point table, GCJ-02 coordinates | POI 节点，按 daily / tour / transport / other 分组 |
-| Conservation areas | `data/historic_conservation_areas/*.geojson` | Polygon | 历史文化风貌区节点，共 12 个 |
-| Administrative areas | `data/admin_boundary/shanghai_admin_boundary.geojson` | Polygon | 行政区/街镇边界节点 |
+| Metro stations | `data/raw/metro_stations/shanghai_metro_stations_amap.csv` | point table, GCJ-02 coordinates | 样本中心锚点，共 537 个站点 |
+| Historic buildings | `data/raw/historic_buildings/shanghai_excellent_historic_buildings_points.csv` | point table, WGS84-like lon/lat | 历史建筑节点，共 1071 个 |
+| Road segments | `data/raw/road_segments/shanghai_road_segments.csv` | WKT LineString | 道路节点，按站点邻域粗筛后保留 |
+| POIs 2026 | `data/raw/poi/2026_poi_Shanghai.csv` | point table, GCJ-02 coordinates | POI 节点，按 daily / tour / transport / other 分组 |
+| Conservation areas | `data/raw/historic_conservation_areas/*.geojson` | Polygon | 历史文化风貌区节点，共 12 个 |
+| Administrative areas | `data/raw/admin_boundary/shanghai_admin_boundary.geojson` | Polygon | 行政区/街镇边界节点 |
 
 图中可将输入层画成 6 个并列小卡片，每张卡片包含一个小图标：
 

@@ -15,11 +15,12 @@ from pyrosm import OSM
 
 
 DEFAULT_PBF_PATH = Path("data/raw/shanghai-260629.osm.pbf")
-OUTPUT_DIR = Path("data/osm")
+OUTPUT_DIR = Path("data/raw/admin_boundary")
+STREET_OUTPUT_DIR = Path("data/raw/street_boundary")
 ADMIN_GPKG_PATH = OUTPUT_DIR / "shanghai_admin_boundary.gpkg"
 ADMIN_GEOJSON_PATH = OUTPUT_DIR / "shanghai_admin_boundary.geojson"
 ADMIN_CSV_PATH = OUTPUT_DIR / "shanghai_admin_boundary.csv"
-STREET_GPKG_PATH = OUTPUT_DIR / "shanghai_street_boundary.gpkg"
+STREET_GPKG_PATH = STREET_OUTPUT_DIR / "shanghai_street_boundary.gpkg"
 SUMMARY_PATH = OUTPUT_DIR / "shanghai_admin_boundary_summary.json"
 
 
@@ -122,6 +123,7 @@ def build_summary(admin: gpd.GeoDataFrame, street_level: str | None) -> dict[str
 
 def save_outputs(admin: gpd.GeoDataFrame, summary: dict[str, Any]) -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    STREET_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     admin.to_file(ADMIN_GPKG_PATH, layer="admin_boundary", driver="GPKG")
     admin.to_file(ADMIN_GEOJSON_PATH, driver="GeoJSON")
 

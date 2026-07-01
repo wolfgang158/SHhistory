@@ -441,7 +441,7 @@ def build_district_cells(grid: int) -> List[Cell]:
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Collect Shanghai POIs from Amap.")
     parser.add_argument("--key", default=DEFAULT_KEY, help="Amap Web Service key.")
-    parser.add_argument("--output-dir", default="data", help="Output directory.")
+    parser.add_argument("--output-dir", default="data/raw/poi", help="Output directory.")
     parser.add_argument("--grid", type=int, default=2, help="Initial grid per axis.")
     parser.add_argument("--offset", type=int, default=25, help="Page size, max 25.")
     parser.add_argument("--sleep", type=float, default=0.25, help="Delay between requests.")

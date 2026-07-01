@@ -437,13 +437,19 @@ def compute_station_weak_labels(
     return pd.DataFrame(rows)
 
 
+def first_geojson(path: Path) -> Path:
+    matches = sorted(path.glob("*.geojson"))
+    if not matches:
+        raise FileNotFoundError(f"No GeoJSON file found in {path}")
+    return matches[0]
+
+
 def resolve_sources(args: argparse.Namespace) -> dict[str, Path]:
     data_dir = args.data_dir
     return {
         "stations": args.stations_csv or data_dir / "metro_stations" / "shanghai_metro_stations_amap.csv",
         "buildings": args.buildings_csv or data_dir / "historic_buildings" / "shanghai_excellent_historic_buildings_points.csv",
-        "conservation": args.conservation_geojson
-        or data_dir / "historic_conservation_areas" / "上海中心城区12片历史文化风貌区_保护边界_面积校准拟合.geojson",
+        "conservation": args.conservation_geojson or first_geojson(data_dir / "historic_conservation_areas"),
         "admin": args.admin_geojson or data_dir / "admin_boundary" / "shanghai_admin_boundary.geojson",
         "roads": args.roads_csv or data_dir / "road_segments" / "shanghai_road_segments.csv",
         "poi": args.poi_csv or data_dir / "poi" / "2026_poi_Shanghai.csv",
@@ -760,7 +766,7 @@ def save_outputs(payload: dict[str, Any], output_dir: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build station-centered heterogeneous graph for HGT.")
-    parser.add_argument("--data-dir", type=Path, default=ROOT / "data", help="Base data directory for default source paths.")
+    parser.add_argument("--data-dir", type=Path, default=ROOT / "data" / "raw", help="Base raw data directory for default source paths.")
     parser.add_argument("--stations-csv", type=Path, default=None, help="Override metro stations CSV source.")
     parser.add_argument("--buildings-csv", type=Path, default=None, help="Override historic buildings CSV source.")
     parser.add_argument("--conservation-geojson", type=Path, default=None, help="Override conservation areas GeoJSON source.")

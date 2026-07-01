@@ -7,7 +7,7 @@ for %%I in ("%SCRIPT_DIR%..\..") do set "ROOT=%%~fI"
 for /f %%I in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set "RUN_ID=%%I"
 
 if not defined HGT_CONDA_ENV set "HGT_CONDA_ENV=HGT"
-if not defined HGT_DATA_DIR set "HGT_DATA_DIR=%ROOT%\data"
+if not defined HGT_DATA_DIR set "HGT_DATA_DIR=%ROOT%\data\raw"
 if not defined HGT_OUTPUT_DIR set "HGT_OUTPUT_DIR=%ROOT%\outputs\preprocess\hgt_graph\runs\%RUN_ID%"
 
 set "EXTRA_ARGS="

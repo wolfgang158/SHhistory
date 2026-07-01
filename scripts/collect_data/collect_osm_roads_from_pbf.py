@@ -15,7 +15,7 @@ from pyrosm import OSM
 
 
 DEFAULT_PBF_PATH = Path("data/raw/shanghai-260629.osm.pbf")
-OUTPUT_DIR = Path("data/osm")
+OUTPUT_DIR = Path("data/raw/road_segments")
 GPKG_PATH = OUTPUT_DIR / "shanghai_road_segments.gpkg"
 GEOJSON_PATH = OUTPUT_DIR / "shanghai_road_segments.geojson"
 CSV_PATH = OUTPUT_DIR / "shanghai_road_segments.csv"

@@ -21,7 +21,7 @@ from osmnx._errors import InsufficientResponseError
 
 PLACE_NAME = "Shanghai, China"
 SHANGHAI_BBOX = (120.85, 30.67, 122.12, 31.88)  # west, south, east, north
-OUTPUT_DIR = Path("data/osm")
+OUTPUT_DIR = Path("data/raw/road_segments")
 TILE_DIR = OUTPUT_DIR / "tiles"
 FAILED_TILES_PATH = OUTPUT_DIR / "failed_tiles.jsonl"
 EMPTY_TILES_PATH = OUTPUT_DIR / "empty_tiles.jsonl"
@@ -428,7 +428,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--only-failed",
         action="store_true",
-        help="Only retry tile ids recorded in data/osm/failed_tiles.jsonl, then merge all existing tile files.",
+        help="Only retry tile ids recorded in data/raw/road_segments/failed_tiles.jsonl, then merge all existing tile files.",
     )
     parser.add_argument(
         "--only-tiles",

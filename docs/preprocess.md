@@ -112,11 +112,11 @@
 
   结合你现有仓库，最适合先接入的数据
 
-  - 地铁站点：data/metro_stations/shanghai_metro_stations_amap.csv
-  - 历史建筑：data/historic_buildings/...
-  - 风貌区边界：data/historic_conservation_areas/...
-  - 道路：data/osm/shanghai_road_segments.*
-  - 行政边界：data/osm/shanghai_admin_boundary.*
+  - 地铁站点：data/raw/metro_stations/shanghai_metro_stations_amap.csv
+  - 历史建筑：data/raw/historic_buildings/...
+  - 风貌区边界：data/raw/historic_conservation_areas/...
+  - 道路：data/raw/road_segments/shanghai_road_segments.*
+  - 行政边界：data/raw/admin_boundary/shanghai_admin_boundary.*
   - POI 扩展抓取脚本：scripts/collect_data/collect_shanghai_poi.py
 
   推荐的第一版落地顺序
