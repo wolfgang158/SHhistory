@@ -53,14 +53,14 @@ lightning_logs/
 *.csv
 
 # Project-specific generated data and caches
-data/raw/
+# data/raw/
 data/cache/
 data/tmp/
 data/intermediate/
 data/runtime.log
 
 # Keep generated geospatial intermediates out unless explicitly committed
-*.gpkg~
-*.geojson~
-*.csv~
+# *.gpkg~
+# *.geojson~
+# *.csv~
 
