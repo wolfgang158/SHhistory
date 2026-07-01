@@ -43,6 +43,49 @@ TOUR_KEYWORDS = ("风景", "住宿", "体育", "休闲", "科教", "文化", "�
 TRANSPORT_KEYWORDS = ("交通", "道路", "通行")
 MAJOR_HIGHWAYS = {"motorway", "trunk", "primary", "secondary"}
 LOCAL_HIGHWAYS = {"tertiary", "residential", "service", "unclassified", "living_street", "road"}
+DAILY_KEYWORDS_UTF8 = (
+    "餐饮",
+    "购物",
+    "生活",
+    "医疗",
+    "金融",
+    "公司",
+    "商务",
+    "住宅",
+    "政府",
+    "学校",
+    "市场",
+    "超市",
+    "便利店",
+    "公厕",
+    "社区",
+    "居委",
+)
+TOUR_KEYWORDS_UTF8 = ("风景", "景点", "酒店", "住宿", "体育", "休闲", "科教", "文化", "公园", "旅游", "展览")
+TRANSPORT_KEYWORDS_UTF8 = ("交通", "道路", "通行", "公交", "地铁", "停车")
+HISTORIC_KEYWORDS = (
+    "历史",
+    "文物",
+    "遗址",
+    "旧址",
+    "故居",
+    "古镇",
+    "古街",
+    "老街",
+    "博物馆",
+    "纪念",
+    "名人",
+    "文化",
+    "寺",
+    "庙",
+    "教堂",
+    "祠",
+    "牌坊",
+    "会馆",
+    "公馆",
+    "石库门",
+)
+HISTORIC_FLAG_COLUMNS = ("is_historic", "historic", "history", "历史", "历史标注", "是否历史", "历史节点")
 
 
 def out_text(value: Any) -> str:
@@ -120,13 +163,35 @@ def pad_feature(values: list[float]) -> list[float]:
 
 
 def poi_group(text: str) -> str:
-    if any(k in text for k in DAILY_KEYWORDS):
+    if any(k in text for k in DAILY_KEYWORDS) or any(k in text for k in DAILY_KEYWORDS_UTF8):
         return "daily"
-    if any(k in text for k in TOUR_KEYWORDS):
+    if any(k in text for k in TOUR_KEYWORDS) or any(k in text for k in TOUR_KEYWORDS_UTF8):
         return "tour"
-    if any(k in text for k in TRANSPORT_KEYWORDS):
+    if any(k in text for k in TRANSPORT_KEYWORDS) or any(k in text for k in TRANSPORT_KEYWORDS_UTF8):
         return "transport"
     return "other"
+
+
+def truthy_flag(value: Any) -> bool:
+    if pd.isna(value):
+        return False
+    text = str(value).strip().lower()
+    return text in {"1", "true", "yes", "y", "是", "历史", "historic", "history"}
+
+
+def first_existing_column(columns: list[str], candidates: tuple[str, ...]) -> str | None:
+    lowered = {str(col).strip().lower(): col for col in columns}
+    for candidate in candidates:
+        hit = lowered.get(candidate.lower())
+        if hit is not None:
+            return hit
+    return None
+
+
+def is_historic_poi(row: pd.Series, text: str, historic_col: str | None) -> bool:
+    if historic_col is not None:
+        return truthy_flag(row.get(historic_col))
+    return any(keyword in text for keyword in HISTORIC_KEYWORDS)
 
 
 def load_stations(path: Path) -> pd.DataFrame:
@@ -235,6 +300,7 @@ def load_pois(path: Path, station_xy: np.ndarray, radius_m: float, max_per_stati
         if len(cols) < 5:
             continue
         name_col, big_col, mid_col, lon_col, lat_col = cols[:5]
+        historic_col = first_existing_column(cols, HISTORIC_FLAG_COLUMNS)
         for i, row in chunk.iterrows():
             lon_raw, lat_raw = safe_float(row[lon_col], np.nan), safe_float(row[lat_col], np.nan)
             if not np.isfinite(lon_raw) or not np.isfinite(lat_raw):
@@ -246,12 +312,15 @@ def load_pois(path: Path, station_xy: np.ndarray, radius_m: float, max_per_stati
                 continue
             text = f"{row.get(big_col, '')};{row.get(mid_col, '')}"
             group = poi_group(text)
+            historic = is_historic_poi(row, f"{row.get(name_col, '')};{text}", historic_col)
             rec = {
                 "id": f"poi:{i}",
                 "raw_id": str(i),
                 "name": row.get(name_col, ""),
                 "category": text,
                 "group": group,
+                "is_historic": int(historic),
+                "is_daily": int(group == "daily"),
                 "lon": lon,
                 "lat": lat,
                 "x": x,
@@ -276,6 +345,96 @@ def load_pois(path: Path, station_xy: np.ndarray, radius_m: float, max_per_stati
 def add_bidirectional(edges: list[dict[str, Any]], src_type: str, src: int, rel: str, dst_type: str, dst: int, weight: float = 1.0):
     edges.append({"source_type": src_type, "source": src, "relation": rel, "target_type": dst_type, "target": dst, "weight": weight})
     edges.append({"source_type": dst_type, "source": dst, "relation": f"rev_{rel}", "target_type": src_type, "target": src, "weight": weight})
+
+
+def compute_station_weak_labels(
+    stations: pd.DataFrame,
+    buildings: pd.DataFrame,
+    pois: pd.DataFrame,
+    label_radius_m: float,
+    conflict_link_m: float,
+    conflict_threshold: float,
+    min_conflict_nodes: int,
+) -> pd.DataFrame:
+    """Create station-level weak labels from 500m historic/daily node balance.
+
+    Historic nodes are historic building nodes plus POIs with explicit or
+    keyword-derived historic flags. Non-historic daily nodes are daily POIs
+    without a historic flag. Connectivity is a bipartite density proxy between
+    historic and daily nodes inside the station label radius.
+    """
+
+    rows = []
+    station_xy = stations[["x", "y"]].to_numpy()
+    building_xy = buildings[["x", "y"]].to_numpy() if len(buildings) else np.empty((0, 2))
+    building_tree = cKDTree(building_xy) if len(building_xy) else None
+
+    if len(pois):
+        poi_xy = pois[["x", "y"]].to_numpy()
+        historic_poi_mask = pois["is_historic"].astype(bool).to_numpy() if "is_historic" in pois else np.zeros(len(pois), dtype=bool)
+        daily_poi_mask = pois["is_daily"].astype(bool).to_numpy() if "is_daily" in pois else pois["group"].eq("daily").to_numpy()
+        poi_tree = cKDTree(poi_xy)
+    else:
+        poi_xy = np.empty((0, 2))
+        historic_poi_mask = np.zeros(0, dtype=bool)
+        daily_poi_mask = np.zeros(0, dtype=bool)
+        poi_tree = None
+
+    for sid, sxy in enumerate(station_xy):
+        building_ids = building_tree.query_ball_point(sxy, label_radius_m) if building_tree is not None else []
+        poi_ids = poi_tree.query_ball_point(sxy, label_radius_m) if poi_tree is not None else []
+
+        historic_poi_ids = [pid for pid in poi_ids if historic_poi_mask[pid]]
+        daily_poi_ids = [pid for pid in poi_ids if daily_poi_mask[pid] and not historic_poi_mask[pid]]
+
+        historic_points = []
+        if building_ids:
+            historic_points.append(building_xy[np.asarray(building_ids, dtype=int)])
+        if historic_poi_ids:
+            historic_points.append(poi_xy[np.asarray(historic_poi_ids, dtype=int)])
+        historic_points_arr = np.vstack(historic_points) if historic_points else np.empty((0, 2))
+        daily_points_arr = poi_xy[np.asarray(daily_poi_ids, dtype=int)] if daily_poi_ids else np.empty((0, 2))
+
+        historic_count = int(len(historic_points_arr))
+        daily_count = int(len(daily_points_arr))
+        total = historic_count + daily_count
+        historic_prob = historic_count / total if total else 0.0
+        daily_prob = daily_count / total if total else 0.0
+        balance = 1.0 - abs(historic_count - daily_count) / total if total else 0.0
+
+        if historic_count and daily_count:
+            daily_tree = cKDTree(daily_points_arr)
+            cross_links = int(sum(len(ids) for ids in daily_tree.query_ball_point(historic_points_arr, conflict_link_m)))
+            full_links = historic_count * daily_count
+            connectivity = cross_links / full_links if full_links else 0.0
+        else:
+            cross_links = 0
+            full_links = 0
+            connectivity = 0.0
+
+        conflict_index = balance * connectivity
+        conflict_label = int(
+            historic_count >= min_conflict_nodes
+            and daily_count >= min_conflict_nodes
+            and conflict_index >= conflict_threshold
+        )
+        rows.append(
+            {
+                "station_id": sid,
+                "label_radius_m": label_radius_m,
+                "historic_node_count_500m": historic_count,
+                "daily_node_count_500m": daily_count,
+                "historic_probability_500m": historic_prob,
+                "daily_probability_500m": daily_prob,
+                "historic_daily_balance_500m": balance,
+                "historic_daily_cross_links_500m": cross_links,
+                "historic_daily_full_links_500m": full_links,
+                "historic_daily_connectivity_500m": connectivity,
+                "conflict_index_500m": conflict_index,
+                "conflict_label_500m": conflict_label,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def resolve_sources(args: argparse.Namespace) -> dict[str, Path]:
@@ -305,6 +464,16 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
     admin = load_areas(sources["admin"], "admin_area")
     roads = load_roads(sources["roads"], station_xy, args.radius_m)
     pois = load_pois(sources["poi"], station_xy, args.radius_m, args.max_poi_per_station_group)
+    station_labels = compute_station_weak_labels(
+        stations,
+        buildings,
+        pois,
+        args.label_radius_m,
+        args.conflict_link_m,
+        args.conflict_threshold,
+        args.min_conflict_nodes,
+    )
+    stations = stations.join(station_labels.drop(columns=["station_id"]))
 
     all_x = np.concatenate(
         [
@@ -401,6 +570,10 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
                     log_norm(m["major_road_length_m"] / 1000.0, 100),
                     m["in_conservation"],
                     mix,
+                    row["historic_probability_500m"],
+                    row["daily_probability_500m"],
+                    log_norm(row["historic_node_count_500m"], 100),
+                    log_norm(row["daily_node_count_500m"], 200),
                 ]
             )
         )
@@ -443,7 +616,16 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
     for _, row in pois.iterrows():
         one_hot = [0.0, 0.0, 0.0, 0.0]
         one_hot[group_to_idx.get(row["group"], 3)] = 1.0
-        poi_features.append(pad_feature(point_feature(row["x"], row["y"], bounds) + one_hot))
+        poi_features.append(
+            pad_feature(
+                point_feature(row["x"], row["y"], bounds)
+                + one_hot
+                + [
+                    row.get("is_historic", 0),
+                    row.get("is_daily", 0),
+                ]
+            )
+        )
     node_tables["poi"] = pois
     feature_tables["poi"] = np.asarray(poi_features, dtype=np.float32)
 
@@ -458,6 +640,10 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
     for node_type, feats in feature_tables.items():
         hetero[node_type].x = torch.tensor(feats, dtype=torch.float32)
         hetero[node_type].node_id = torch.arange(len(feats), dtype=torch.long)
+    hetero["station"].y_conflict = torch.tensor(stations["conflict_label_500m"].to_numpy(), dtype=torch.long)
+    hetero["station"].conflict_index = torch.tensor(stations["conflict_index_500m"].to_numpy(), dtype=torch.float32)
+    hetero["station"].historic_probability = torch.tensor(stations["historic_probability_500m"].to_numpy(), dtype=torch.float32)
+    hetero["station"].daily_probability = torch.tensor(stations["daily_probability_500m"].to_numpy(), dtype=torch.float32)
 
     edge_df = pd.DataFrame(edges)
     for (src_type, rel, dst_type), group in edge_df.groupby(["source_type", "relation", "target_type"], sort=True):
@@ -513,6 +699,10 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
         "edge_index": torch.tensor(edge_index, dtype=torch.long).t().contiguous(),
         "edge_type": torch.tensor(edge_type, dtype=torch.long),
         "edge_time": torch.tensor(edge_time, dtype=torch.long),
+        "station_y_conflict": torch.tensor(stations["conflict_label_500m"].to_numpy(), dtype=torch.long),
+        "station_conflict_index": torch.tensor(stations["conflict_index_500m"].to_numpy(), dtype=torch.float32),
+        "station_historic_probability": torch.tensor(stations["historic_probability_500m"].to_numpy(), dtype=torch.float32),
+        "station_daily_probability": torch.tensor(stations["daily_probability_500m"].to_numpy(), dtype=torch.float32),
         "node_type_map": {t: i for i, t in enumerate(node_type_order)},
         "edge_type_map": {str(k): v for k, v in edge_type_map.items()},
         "node_offsets": node_offsets,
@@ -526,10 +716,26 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
         "edges": edge_df,
         "summary": {
             "radius_m": args.radius_m,
+            "label_radius_m": args.label_radius_m,
+            "conflict_link_m": args.conflict_link_m,
+            "conflict_threshold": args.conflict_threshold,
+            "min_conflict_nodes": args.min_conflict_nodes,
             "feature_dim": FEATURE_DIM,
             "node_counts": {k: int(len(v)) for k, v in node_tables.items()},
             "edge_counts": edge_df.groupby(["source_type", "relation", "target_type"]).size().to_dict(),
             "total_edges": int(len(edge_df)),
+            "station_conflict_label_counts": {
+                str(k): int(v) for k, v in stations["conflict_label_500m"].value_counts().sort_index().items()
+            },
+            "station_conflict_index": {
+                "min": float(stations["conflict_index_500m"].min()),
+                "mean": float(stations["conflict_index_500m"].mean()),
+                "max": float(stations["conflict_index_500m"].max()),
+            },
+            "weak_label_definition": (
+                "500m station circle; historic nodes = historic buildings + explicit/keyword historic POIs; "
+                "daily nodes = non-historic daily POIs; conflict_index = count_balance * bipartite_connectivity"
+            ),
             "crs": "EPSG:3857 features from WGS84/GCJ02-normalized source coordinates",
             "sources": {k: str(v) for k, v in sources.items()},
         },
@@ -562,6 +768,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--roads-csv", type=Path, default=None, help="Override road segments CSV source.")
     parser.add_argument("--poi-csv", type=Path, default=None, help="Override POI CSV source.")
     parser.add_argument("--radius-m", type=float, default=2560.0, help="Station context radius; 512px * 10m / 2 by default.")
+    parser.add_argument("--label-radius-m", type=float, default=500.0, help="Radius for weak station conflict labels.")
+    parser.add_argument("--conflict-link-m", type=float, default=150.0, help="Cross-group link distance for historic/daily connectivity.")
+    parser.add_argument("--conflict-threshold", type=float, default=0.15, help="Weak conflict label threshold on balance * connectivity.")
+    parser.add_argument("--min-conflict-nodes", type=int, default=2, help="Minimum nodes required in each group for a positive conflict label.")
     parser.add_argument("--max-poi-per-station-group", type=int, default=120, help="Nearest POI cap per station and POI group.")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "outputs" / "preprocess" / "hgt_graph")
     return parser.parse_args()

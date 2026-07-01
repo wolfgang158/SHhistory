@@ -191,7 +191,11 @@ EPSG:3857 metric plane for distance query and graph geometry
 9. log normalized major road length
 10. conservation-area membership flag
 11. daily-tour mix score
-12-16. zero padding
+12. historic probability in 500m weak-label circle
+13. daily probability in 500m weak-label circle
+14. log normalized historic node count in 500m circle
+15. log normalized daily node count in 500m circle
+16. zero padding
 
 ### Building feature
 
@@ -216,7 +220,9 @@ EPSG:3857 metric plane for distance query and graph geometry
 1. normalized x
 2. normalized y
 3-6. one-hot POI group: daily, tour, transport, other
-7-16. zero padding
+7. historic POI weak flag
+8. daily POI weak flag
+9-16. zero padding
 
 ### Area feature
 
@@ -232,6 +238,54 @@ For `conservation_area` and `admin_area`:
 - 在异质图右侧放一个 **Feature Encoding** 模块。
 - 模块内画成一个 16 维向量条：`[x, y, counts, lengths, flags, mix, padding]`。
 - 可以放一个小公式：`node feature -> R^16`。
+
+## Step 5.5: 500m 弱监督冲突标签
+
+当前预处理脚本可额外生成站点级弱监督字段，用于后续 HGT 训练。该规则不是人工真值标签，而是根据研究问题构造的 proxy label。
+
+默认参数：
+
+```text
+label_radius_m = 500
+conflict_link_m = 150
+conflict_threshold = 0.15
+min_conflict_nodes = 2
+```
+
+定义：
+
+- **Historic nodes**: historic building nodes + POIs with explicit historic flag or historic keywords.
+- **Daily nodes**: non-historic daily POIs.
+- **Historic probability**: `historic_count / (historic_count + daily_count)`.
+- **Daily probability**: `daily_count / (historic_count + daily_count)`.
+- **Balance**: `1 - abs(historic_count - daily_count) / (historic_count + daily_count)`.
+- **Cross-connectivity**: observed historic-daily pairs within `conflict_link_m` divided by the full bipartite pair count `historic_count * daily_count`.
+- **Conflict index**: `balance * cross_connectivity`.
+- **Conflict label**: positive when both node groups have at least `min_conflict_nodes` and `conflict_index >= conflict_threshold`.
+
+输出字段写入 `nodes/station.csv`、`hetero_data.pt` 和 `hgt_tensors.pt`：
+
+```text
+historic_node_count_500m
+daily_node_count_500m
+historic_probability_500m
+daily_probability_500m
+historic_daily_balance_500m
+historic_daily_connectivity_500m
+conflict_index_500m
+conflict_label_500m
+```
+
+为避免训练时标签泄漏，`conflict_index_500m` 和 `conflict_label_500m` 作为监督/评估字段输出，但不作为 station `x` 的输入特征；station `x` 只包含历史性/日常性概率和计数先验。
+
+图中建议把该步骤画为站点上下文圆旁边的一个小标签生成模块：
+
+```text
+500m weak label circle
+historic vs daily node balance
+cross-group spatial connectivity
+conflict_index = balance x connectivity
+```
 
 ## Step 6: 输出数据产物
 
@@ -354,4 +408,3 @@ minimal CVPR / NeurIPS diagram style, crisp vector-like graphics, thin gray outl
 ## 简化版 Caption
 
 **Figure.** Preprocessing pipeline for station-centered heterogeneous graph construction. Multi-source Shanghai urban data are normalized into EPSG:3857, queried within a 2560 m context radius around each metro station, and converted into typed spatial nodes and typed relations. Each node is encoded as a 16-D feature vector, and the final graph is exported as PyG `HeteroData`, pyHGT graph, flat HGT tensors, and inspection tables.
-
