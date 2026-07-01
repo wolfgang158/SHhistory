@@ -49,6 +49,8 @@ lightning_logs/
 *.pt
 *.pth
 *.ckpt
+*.pkl
+*.csv
 
 # Project-specific generated data and caches
 data/raw/
