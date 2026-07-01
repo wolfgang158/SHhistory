@@ -13,6 +13,7 @@ import argparse
 import json
 import math
 import sys
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -86,6 +87,14 @@ HISTORIC_KEYWORDS = (
     "石库门",
 )
 HISTORIC_FLAG_COLUMNS = ("is_historic", "historic", "history", "历史", "历史标注", "是否历史", "历史节点")
+STATION_ENTRY_FLOW_COLUMNS = ("entry_flow", "in_flow", "daily_entry", "daily_in", "进站量", "日均进站量")
+STATION_EXIT_FLOW_COLUMNS = ("exit_flow", "out_flow", "daily_exit", "daily_out", "出站量", "日均出站量")
+STATION_TOTAL_FLOW_COLUMNS = ("flow", "daily_flow", "passenger_flow", "客流", "日均客流", "总客流")
+
+
+def log_progress(message: str) -> None:
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[build_hgt_graph {timestamp}] {message}", flush=True)
 
 
 def out_text(value: Any) -> str:
@@ -188,6 +197,31 @@ def first_existing_column(columns: list[str], candidates: tuple[str, ...]) -> st
     return None
 
 
+def minmax_norm(values: list[float] | np.ndarray) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.float64)
+    if not len(arr):
+        return arr
+    min_value = float(np.nanmin(arr))
+    max_value = float(np.nanmax(arr))
+    span = max_value - min_value
+    if not np.isfinite(span) or span <= 0.0:
+        return np.zeros_like(arr, dtype=np.float64)
+    return (arr - min_value) / span
+
+
+def infer_station_flow(row: pd.Series) -> float:
+    total_col = first_existing_column(list(row.index), STATION_TOTAL_FLOW_COLUMNS)
+    if total_col is not None:
+        flow = safe_float(row.get(total_col), 0.0)
+        if flow > 0.0:
+            return flow
+
+    entry_col = first_existing_column(list(row.index), STATION_ENTRY_FLOW_COLUMNS)
+    exit_col = first_existing_column(list(row.index), STATION_EXIT_FLOW_COLUMNS)
+    flow = safe_float(row.get(entry_col), 0.0) + safe_float(row.get(exit_col), 0.0)
+    return flow if flow > 0.0 else 1.0
+
+
 def is_historic_poi(row: pd.Series, text: str, historic_col: str | None) -> bool:
     if historic_col is not None:
         return truthy_flag(row.get(historic_col))
@@ -210,6 +244,7 @@ def load_stations(path: Path) -> pd.DataFrame:
                 "x": x,
                 "y": y,
                 "adname": row.get("adname", ""),
+                "flow": infer_station_flow(row),
             }
         )
     return pd.DataFrame(rows)
@@ -263,9 +298,12 @@ def load_areas(path: Path, node_type: str) -> pd.DataFrame:
 
 
 def load_roads(path: Path, station_xy: np.ndarray, radius_m: float) -> pd.DataFrame:
+    log_progress(f"loading roads: {path}")
     tree = cKDTree(station_xy)
     rows = []
-    for chunk in pd.read_csv(path, chunksize=20000):
+    total_seen = 0
+    for chunk_idx, chunk in enumerate(pd.read_csv(path, chunksize=20000), start=1):
+        total_seen += len(chunk)
         for _, row in chunk.iterrows():
             try:
                 geom = wkt.loads(row["geometry"])
@@ -289,13 +327,20 @@ def load_roads(path: Path, station_xy: np.ndarray, radius_m: float) -> pd.DataFr
                     "geometry": projected,
                 }
             )
+        log_progress(f"roads chunk {chunk_idx}: scanned={total_seen}, kept={len(rows)}")
+    log_progress(f"loaded roads: kept={len(rows)}")
     return pd.DataFrame(rows)
 
 
 def load_pois(path: Path, station_xy: np.ndarray, radius_m: float, max_per_station_group: int) -> pd.DataFrame:
+    log_progress(f"loading POIs: {path}")
     tree = cKDTree(station_xy)
     selected: dict[tuple[int, str], list[tuple[float, dict[str, Any]]]] = defaultdict(list)
-    for chunk in pd.read_csv(path, chunksize=50000):
+    total_seen = 0
+    total_near_station = 0
+    for chunk_idx, chunk in enumerate(pd.read_csv(path, chunksize=50000), start=1):
+        total_seen += len(chunk)
+        chunk_near_station = 0
         cols = list(chunk.columns)
         if len(cols) < 5:
             continue
@@ -310,6 +355,7 @@ def load_pois(path: Path, station_xy: np.ndarray, radius_m: float, max_per_stati
             station_ids = tree.query_ball_point([x, y], radius_m)
             if not station_ids:
                 continue
+            chunk_near_station += 1
             text = f"{row.get(big_col, '')};{row.get(mid_col, '')}"
             group = poi_group(text)
             historic = is_historic_poi(row, f"{row.get(name_col, '')};{text}", historic_col)
@@ -333,12 +379,17 @@ def load_pois(path: Path, station_xy: np.ndarray, radius_m: float, max_per_stati
                 if len(bucket) > max_per_station_group * 3:
                     bucket.sort(key=lambda item: item[0])
                     del bucket[max_per_station_group:]
+        total_near_station += chunk_near_station
+        log_progress(
+            f"POI chunk {chunk_idx}: scanned={total_seen}, near_station={total_near_station}, buckets={len(selected)}"
+        )
 
     unique: dict[str, dict[str, Any]] = {}
     for bucket in selected.values():
         bucket.sort(key=lambda item: item[0])
         for _, rec in bucket[:max_per_station_group]:
             unique[rec["id"]] = rec
+    log_progress(f"loaded POIs: unique_kept={len(unique)}")
     return pd.DataFrame(unique.values())
 
 
@@ -350,90 +401,183 @@ def add_bidirectional(edges: list[dict[str, Any]], src_type: str, src: int, rel:
 def compute_station_weak_labels(
     stations: pd.DataFrame,
     buildings: pd.DataFrame,
+    roads: pd.DataFrame,
     pois: pd.DataFrame,
     label_radius_m: float,
-    conflict_link_m: float,
-    conflict_threshold: float,
-    min_conflict_nodes: int,
+    poi_influence_m: float,
+    metro_influence_m: float,
+    eps: float,
 ) -> pd.DataFrame:
-    """Create station-level weak labels from 500m historic/daily node balance.
+    """Create station-level weak labels from daily-tourism mix and pressure.
 
-    Historic nodes are historic building nodes plus POIs with explicit or
-    keyword-derived historic flags. Non-historic daily nodes are daily POIs
-    without a historic flag. Connectivity is a bipartite density proxy between
-    historic and daily nodes inside the station label radius.
+    The project formula is defined for road segments. This station-centered
+    graph maps the same ingredients to station anchors: nearby daily POIs,
+    tourism POIs plus historic nodes, metro flow pressure, and local road
+    pressure. Conflict labels are low/medium/high from 40%/80% quantiles.
     """
 
-    rows = []
+    log_progress("computing station weak labels")
     station_xy = stations[["x", "y"]].to_numpy()
     building_xy = buildings[["x", "y"]].to_numpy() if len(buildings) else np.empty((0, 2))
     building_tree = cKDTree(building_xy) if len(building_xy) else None
+    station_tree = cKDTree(station_xy) if len(station_xy) else None
+    station_flow = stations["flow"].to_numpy(dtype=np.float64) if "flow" in stations else np.ones(len(stations), dtype=np.float64)
+
+    if len(roads):
+        road_xy = roads[["x", "y"]].to_numpy()
+        road_tree = cKDTree(road_xy)
+    else:
+        road_xy = np.empty((0, 2))
+        road_tree = None
 
     if len(pois):
         poi_xy = pois[["x", "y"]].to_numpy()
         historic_poi_mask = pois["is_historic"].astype(bool).to_numpy() if "is_historic" in pois else np.zeros(len(pois), dtype=bool)
         daily_poi_mask = pois["is_daily"].astype(bool).to_numpy() if "is_daily" in pois else pois["group"].eq("daily").to_numpy()
+        tour_poi_mask = pois["group"].eq("tour").to_numpy()
         poi_tree = cKDTree(poi_xy)
     else:
         poi_xy = np.empty((0, 2))
         historic_poi_mask = np.zeros(0, dtype=bool)
         daily_poi_mask = np.zeros(0, dtype=bool)
+        tour_poi_mask = np.zeros(0, dtype=bool)
         poi_tree = None
 
+    raw_rows = []
     for sid, sxy in enumerate(station_xy):
-        building_ids = building_tree.query_ball_point(sxy, label_radius_m) if building_tree is not None else []
-        poi_ids = poi_tree.query_ball_point(sxy, label_radius_m) if poi_tree is not None else []
+        poi_ids = poi_tree.query_ball_point(sxy, poi_influence_m) if poi_tree is not None else []
+        label_poi_ids = poi_tree.query_ball_point(sxy, label_radius_m) if poi_tree is not None else []
+        daily_score = 0.0
+        tour_poi_score = 0.0
+        historic_poi_score = 0.0
+        for pid in poi_ids:
+            dist = float(np.linalg.norm(sxy - poi_xy[pid]))
+            decay = max(0.0, 1.0 - dist / max(poi_influence_m, 1.0))
+            if daily_poi_mask[pid] and not historic_poi_mask[pid]:
+                daily_score += decay
+            if tour_poi_mask[pid]:
+                tour_poi_score += decay
+            if historic_poi_mask[pid]:
+                historic_poi_score += decay
 
-        historic_poi_ids = [pid for pid in poi_ids if historic_poi_mask[pid]]
-        daily_poi_ids = [pid for pid in poi_ids if daily_poi_mask[pid] and not historic_poi_mask[pid]]
+        building_ids = building_tree.query_ball_point(sxy, poi_influence_m) if building_tree is not None else []
+        label_building_ids = building_tree.query_ball_point(sxy, label_radius_m) if building_tree is not None else []
+        historic_building_score = 0.0
+        for bid in building_ids:
+            dist = float(np.linalg.norm(sxy - building_xy[bid]))
+            historic_building_score += max(0.0, 1.0 - dist / max(poi_influence_m, 1.0))
 
-        historic_points = []
-        if building_ids:
-            historic_points.append(building_xy[np.asarray(building_ids, dtype=int)])
-        if historic_poi_ids:
-            historic_points.append(poi_xy[np.asarray(historic_poi_ids, dtype=int)])
-        historic_points_arr = np.vstack(historic_points) if historic_points else np.empty((0, 2))
-        daily_points_arr = poi_xy[np.asarray(daily_poi_ids, dtype=int)] if daily_poi_ids else np.empty((0, 2))
+        station_ids = station_tree.query_ball_point(sxy, metro_influence_m) if station_tree is not None else []
+        metro_score = 0.0
+        for near_sid in station_ids:
+            dist = float(np.linalg.norm(sxy - station_xy[near_sid]))
+            metro_score += float(station_flow[near_sid]) * max(0.0, 1.0 - dist / max(metro_influence_m, 1.0))
 
-        historic_count = int(len(historic_points_arr))
-        daily_count = int(len(daily_points_arr))
-        total = historic_count + daily_count
-        historic_prob = historic_count / total if total else 0.0
-        daily_prob = daily_count / total if total else 0.0
-        balance = 1.0 - abs(historic_count - daily_count) / total if total else 0.0
+        road_score = 0.0
+        if road_tree is not None:
+            for rid in road_tree.query_ball_point(sxy, label_radius_m):
+                row = roads.iloc[rid]
+                dist = float(row["geometry"].distance(Point(float(sxy[0]), float(sxy[1]))))
+                if dist > label_radius_m:
+                    continue
+                highway = row["highway"]
+                highway_weight = 2.0 if highway in MAJOR_HIGHWAYS else 1.0
+                road_score += highway_weight * safe_float(row.get("length"), 0.0) * max(0.0, 1.0 - dist / max(label_radius_m, 1.0))
 
-        if historic_count and daily_count:
-            daily_tree = cKDTree(daily_points_arr)
-            cross_links = int(sum(len(ids) for ids in daily_tree.query_ball_point(historic_points_arr, conflict_link_m)))
-            full_links = historic_count * daily_count
-            connectivity = cross_links / full_links if full_links else 0.0
-        else:
-            cross_links = 0
-            full_links = 0
-            connectivity = 0.0
-
-        conflict_index = balance * connectivity
-        conflict_label = int(
-            historic_count >= min_conflict_nodes
-            and daily_count >= min_conflict_nodes
-            and conflict_index >= conflict_threshold
-        )
-        rows.append(
+        historic_score = historic_building_score + historic_poi_score
+        tourism_score = tour_poi_score + 2.0 * historic_score
+        normalizer = max(label_radius_m, 1.0)
+        raw_rows.append(
             {
                 "station_id": sid,
                 "label_radius_m": label_radius_m,
-                "historic_node_count_500m": historic_count,
-                "daily_node_count_500m": daily_count,
-                "historic_probability_500m": historic_prob,
-                "daily_probability_500m": daily_prob,
-                "historic_daily_balance_500m": balance,
-                "historic_daily_cross_links_500m": cross_links,
-                "historic_daily_full_links_500m": full_links,
-                "historic_daily_connectivity_500m": connectivity,
-                "conflict_index_500m": conflict_index,
-                "conflict_label_500m": conflict_label,
+                "daily_raw": daily_score / normalizer,
+                "tourism_raw": tourism_score / normalizer,
+                "historic_raw": historic_score / normalizer,
+                "metro_raw": metro_score,
+                "network_raw": road_score,
+                "historic_node_count_500m": int(len(label_building_ids) + sum(1 for pid in label_poi_ids if historic_poi_mask[pid])),
+                "daily_node_count_500m": int(sum(1 for pid in label_poi_ids if daily_poi_mask[pid] and not historic_poi_mask[pid])),
+                "tourism_poi_count_500m": int(sum(1 for pid in label_poi_ids if tour_poi_mask[pid])),
             }
         )
+        if (sid + 1) % 50 == 0 or sid + 1 == len(station_xy):
+            log_progress(f"weak labels: stations={sid + 1}/{len(station_xy)}")
+
+    if not raw_rows:
+        return pd.DataFrame()
+
+    raw_df = pd.DataFrame(raw_rows)
+    daily_norm = minmax_norm(raw_df["daily_raw"].to_numpy())
+    tourism_norm = minmax_norm(raw_df["tourism_raw"].to_numpy())
+    historic_norm = minmax_norm(raw_df["historic_raw"].to_numpy())
+    metro_norm = minmax_norm(raw_df["metro_raw"].to_numpy())
+    network_norm = minmax_norm(raw_df["network_raw"].to_numpy())
+    mix = (2.0 * daily_norm * tourism_norm) / (daily_norm + tourism_norm + eps)
+    pressure = 1.0 - (1.0 - metro_norm) * (1.0 - network_norm)
+    conflict = mix * pressure
+
+    if float(np.nanmax(conflict) - np.nanmin(conflict)) <= 0.0:
+        labels = np.zeros(len(conflict), dtype=np.int64)
+        q40 = q80 = float(conflict[0]) if len(conflict) else 0.0
+    else:
+        q40, q80 = np.quantile(conflict, [0.4, 0.8])
+        labels = np.where(conflict >= q80, 2, np.where(conflict >= q40, 1, 0)).astype(np.int64)
+
+    level_names = np.asarray(["low", "medium", "high"], dtype=object)
+    rows = []
+    for idx, raw in raw_df.iterrows():
+        label = int(labels[idx])
+        daily_value = float(daily_norm[idx])
+        historic_value = float(historic_norm[idx])
+        tourism_value = float(tourism_norm[idx])
+        metro_value = float(metro_norm[idx])
+        network_value = float(network_norm[idx])
+        mix_value = float(mix[idx])
+        pressure_value = float(pressure[idx])
+        conflict_value = float(conflict[idx])
+        coexistence_balance = (2.0 * daily_value * historic_value) / (daily_value + historic_value + eps)
+        total_nodes = int(raw["historic_node_count_500m"] + raw["daily_node_count_500m"])
+        legacy_historic_ratio = float(raw["historic_node_count_500m"] / total_nodes) if total_nodes else 0.0
+        legacy_daily_ratio = float(raw["daily_node_count_500m"] / total_nodes) if total_nodes else 0.0
+        rows.append(
+            {
+                "station_id": int(raw["station_id"]),
+                "label_radius_m": label_radius_m,
+                "historic_node_count_500m": int(raw["historic_node_count_500m"]),
+                "daily_node_count_500m": int(raw["daily_node_count_500m"]),
+                "tourism_poi_count_500m": int(raw["tourism_poi_count_500m"]),
+                "daily_intensity_raw_500m": float(raw["daily_raw"]),
+                "tourism_intensity_raw_500m": float(raw["tourism_raw"]),
+                "historic_intensity_raw_500m": float(raw["historic_raw"]),
+                "metro_pressure_raw_500m": float(raw["metro_raw"]),
+                "network_pressure_raw_500m": float(raw["network_raw"]),
+                "daily_intensity_500m": daily_value,
+                "tourism_attraction_500m": tourism_value,
+                "historic_probability_500m": historic_value,
+                "daily_probability_500m": daily_value,
+                "metro_pressure_500m": metro_value,
+                "network_pressure_500m": network_value,
+                "mix_score_500m": mix_value,
+                "pressure_score_500m": pressure_value,
+                "conflict_index_500m": conflict_value,
+                "conflict_label_500m": label,
+                "conflict_level_500m": str(level_names[label]),
+                "conflict_q40_500m": float(q40),
+                "conflict_q80_500m": float(q80),
+                "historic_daily_balance_500m": coexistence_balance,
+                "historic_daily_cross_links_500m": 0,
+                "historic_daily_full_links_500m": 0,
+                "historic_daily_connectivity_500m": conflict_value,
+                "legacy_historic_node_ratio_500m": legacy_historic_ratio,
+                "legacy_daily_node_ratio_500m": legacy_daily_ratio,
+            }
+        )
+    log_progress(
+        "computed station weak labels: "
+        f"q40={float(q40):.6f}, q80={float(q80):.6f}, "
+        f"low={int((labels == 0).sum())}, medium={int((labels == 1).sum())}, high={int((labels == 2).sum())}"
+    )
     return pd.DataFrame(rows)
 
 
@@ -457,30 +601,41 @@ def resolve_sources(args: argparse.Namespace) -> dict[str, Path]:
 
 
 def build_graph(args: argparse.Namespace) -> dict[str, Any]:
+    log_progress("resolving input sources")
     sources = resolve_sources(args)
     for label, path in sources.items():
         if not path.exists():
             raise FileNotFoundError(f"{label} source not found: {path}")
 
+    log_progress("loading stations")
     stations = load_stations(sources["stations"])
+    log_progress(f"loaded stations: {len(stations)}")
     station_xy = stations[["x", "y"]].to_numpy()
     station_tree = cKDTree(station_xy)
+    log_progress("loading buildings")
     buildings = load_buildings(sources["buildings"])
+    log_progress(f"loaded buildings: {len(buildings)}")
+    log_progress("loading conservation areas")
     conservation = load_areas(sources["conservation"], "conservation_area")
+    log_progress(f"loaded conservation areas: {len(conservation)}")
+    log_progress("loading admin areas")
     admin = load_areas(sources["admin"], "admin_area")
+    log_progress(f"loaded admin areas: {len(admin)}")
     roads = load_roads(sources["roads"], station_xy, args.radius_m)
     pois = load_pois(sources["poi"], station_xy, args.radius_m, args.max_poi_per_station_group)
     station_labels = compute_station_weak_labels(
         stations,
         buildings,
+        roads,
         pois,
         args.label_radius_m,
-        args.conflict_link_m,
-        args.conflict_threshold,
-        args.min_conflict_nodes,
+        args.poi_influence_m,
+        args.metro_influence_m,
+        args.conflict_eps,
     )
     stations = stations.join(station_labels.drop(columns=["station_id"]))
 
+    log_progress("computing coordinate bounds")
     all_x = np.concatenate(
         [
             stations[["x"]].to_numpy().ravel(),
@@ -506,6 +661,7 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
     edges: list[dict[str, Any]] = []
     station_metrics = defaultdict(lambda: defaultdict(float))
 
+    log_progress("building station-building edges")
     building_xy = buildings[["x", "y"]].to_numpy()
     building_tree = cKDTree(building_xy)
     for sid, sxy in enumerate(station_xy):
@@ -513,8 +669,10 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
             dist = float(np.linalg.norm(sxy - building_xy[bid]))
             station_metrics[sid]["historic_buildings"] += 1
             add_bidirectional(edges, "station", sid, "near_building", "building", int(bid), 1.0 / (1.0 + dist))
+    log_progress(f"station-building edges complete: edges={len(edges)}")
 
     if len(pois):
+        log_progress("building station-POI edges")
         poi_xy = pois[["x", "y"]].to_numpy()
         poi_tree = cKDTree(poi_xy)
         for sid, sxy in enumerate(station_xy):
@@ -523,7 +681,9 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
                 group = pois.iloc[pid]["group"]
                 station_metrics[sid][f"poi_{group}"] += 1
                 add_bidirectional(edges, "station", sid, f"near_poi_{group}", "poi", int(pid), 1.0 / (1.0 + dist))
+        log_progress(f"station-POI edges complete: edges={len(edges)}")
 
+    log_progress("building station-road edges")
     station_points = [Point(xy) for xy in station_xy]
     for rid, row in roads.iterrows():
         geom = row["geometry"]
@@ -537,7 +697,9 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
                 if highway in MAJOR_HIGHWAYS:
                     station_metrics[sid]["major_road_length_m"] += row["length"]
                 add_bidirectional(edges, "station", sid, "near_road", "road", road_idx, 1.0 / (1.0 + dist))
+    log_progress(f"station-road edges complete: edges={len(edges)}")
 
+    log_progress("building conservation containment edges")
     for aid, row in conservation.iterrows():
         geom = row["geometry"]
         for sid, pt in enumerate(station_points):
@@ -547,16 +709,20 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
         for bid, brow in buildings.iterrows():
             if geom.contains(Point(brow["x"], brow["y"])):
                 add_bidirectional(edges, "building", int(bid), "inside_conservation", "conservation_area", int(aid), 1.0)
+    log_progress(f"conservation containment edges complete: edges={len(edges)}")
 
+    log_progress("building admin containment edges")
     for aid, row in admin.iterrows():
         geom = row["geometry"]
         for sid, pt in enumerate(station_points):
             if geom.contains(pt):
                 add_bidirectional(edges, "station", sid, "inside_admin", "admin_area", int(aid), 1.0)
+    log_progress(f"admin containment edges complete: edges={len(edges)}")
 
     node_tables: dict[str, pd.DataFrame] = {}
     feature_tables: dict[str, np.ndarray] = {}
 
+    log_progress("building node feature tables")
     station_features = []
     for sid, row in stations.iterrows():
         m = station_metrics[sid]
@@ -642,6 +808,7 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
         node_tables[node_type] = df.drop(columns=["geometry"], errors="ignore")
         feature_tables[node_type] = np.asarray(feats, dtype=np.float32)
 
+    log_progress("building PyG HeteroData tensors")
     hetero = HeteroData()
     for node_type, feats in feature_tables.items():
         hetero[node_type].x = torch.tensor(feats, dtype=torch.float32)
@@ -650,14 +817,21 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
     hetero["station"].conflict_index = torch.tensor(stations["conflict_index_500m"].to_numpy(), dtype=torch.float32)
     hetero["station"].historic_probability = torch.tensor(stations["historic_probability_500m"].to_numpy(), dtype=torch.float32)
     hetero["station"].daily_probability = torch.tensor(stations["daily_probability_500m"].to_numpy(), dtype=torch.float32)
+    hetero["station"].tourism_attraction = torch.tensor(stations["tourism_attraction_500m"].to_numpy(), dtype=torch.float32)
+    hetero["station"].metro_pressure = torch.tensor(stations["metro_pressure_500m"].to_numpy(), dtype=torch.float32)
+    hetero["station"].network_pressure = torch.tensor(stations["network_pressure_500m"].to_numpy(), dtype=torch.float32)
+    hetero["station"].mix_score = torch.tensor(stations["mix_score_500m"].to_numpy(), dtype=torch.float32)
+    hetero["station"].pressure_score = torch.tensor(stations["pressure_score_500m"].to_numpy(), dtype=torch.float32)
 
     edge_df = pd.DataFrame(edges)
+    log_progress(f"assembling typed edge tensors: edge_rows={len(edge_df)}")
     for (src_type, rel, dst_type), group in edge_df.groupby(["source_type", "relation", "target_type"], sort=True):
         edge_index = torch.tensor(group[["source", "target"]].to_numpy().T, dtype=torch.long)
         edge_weight = torch.tensor(group["weight"].to_numpy(), dtype=torch.float32)
         hetero[(src_type, rel, dst_type)].edge_index = edge_index
         hetero[(src_type, rel, dst_type)].edge_weight = edge_weight
 
+    log_progress("building pyHGT graph object")
     graph = Graph()
     for node_type, df in node_tables.items():
         for i, row in df.reset_index(drop=True).iterrows():
@@ -709,11 +883,17 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
         "station_conflict_index": torch.tensor(stations["conflict_index_500m"].to_numpy(), dtype=torch.float32),
         "station_historic_probability": torch.tensor(stations["historic_probability_500m"].to_numpy(), dtype=torch.float32),
         "station_daily_probability": torch.tensor(stations["daily_probability_500m"].to_numpy(), dtype=torch.float32),
+        "station_tourism_attraction": torch.tensor(stations["tourism_attraction_500m"].to_numpy(), dtype=torch.float32),
+        "station_metro_pressure": torch.tensor(stations["metro_pressure_500m"].to_numpy(), dtype=torch.float32),
+        "station_network_pressure": torch.tensor(stations["network_pressure_500m"].to_numpy(), dtype=torch.float32),
+        "station_mix_score": torch.tensor(stations["mix_score_500m"].to_numpy(), dtype=torch.float32),
+        "station_pressure_score": torch.tensor(stations["pressure_score_500m"].to_numpy(), dtype=torch.float32),
         "node_type_map": {t: i for i, t in enumerate(node_type_order)},
         "edge_type_map": {str(k): v for k, v in edge_type_map.items()},
         "node_offsets": node_offsets,
     }
 
+    log_progress("build_graph complete")
     return {
         "graph": graph,
         "hetero": hetero,
@@ -723,9 +903,9 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
         "summary": {
             "radius_m": args.radius_m,
             "label_radius_m": args.label_radius_m,
-            "conflict_link_m": args.conflict_link_m,
-            "conflict_threshold": args.conflict_threshold,
-            "min_conflict_nodes": args.min_conflict_nodes,
+            "poi_influence_m": args.poi_influence_m,
+            "metro_influence_m": args.metro_influence_m,
+            "conflict_eps": args.conflict_eps,
             "feature_dim": FEATURE_DIM,
             "node_counts": {k: int(len(v)) for k, v in node_tables.items()},
             "edge_counts": edge_df.groupby(["source_type", "relation", "target_type"]).size().to_dict(),
@@ -733,14 +913,21 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
             "station_conflict_label_counts": {
                 str(k): int(v) for k, v in stations["conflict_label_500m"].value_counts().sort_index().items()
             },
+            "station_conflict_level_counts": {
+                str(k): int(v) for k, v in stations["conflict_level_500m"].value_counts().sort_index().items()
+            },
             "station_conflict_index": {
                 "min": float(stations["conflict_index_500m"].min()),
                 "mean": float(stations["conflict_index_500m"].mean()),
                 "max": float(stations["conflict_index_500m"].max()),
+                "q40": float(stations["conflict_q40_500m"].iloc[0]) if len(stations) else 0.0,
+                "q80": float(stations["conflict_q80_500m"].iloc[0]) if len(stations) else 0.0,
             },
             "weak_label_definition": (
-                "500m station circle; historic nodes = historic buildings + explicit/keyword historic POIs; "
-                "daily nodes = non-historic daily POIs; conflict_index = count_balance * bipartite_connectivity"
+                "Station-level adaptation of daily-tourism mixed conflict potential: "
+                "D=normalized daily POI distance-decay intensity; T=normalized tourism POI + 2*historic node intensity; "
+                "M=normalized metro flow distance-decay pressure; N=normalized local road pressure proxy; "
+                "conflict_index=(2DT/(D+T+eps))*(1-(1-M)*(1-N)); labels 0/1/2 are low/medium/high by 40%/80% quantiles."
             ),
             "crs": "EPSG:3857 features from WGS84/GCJ02-normalized source coordinates",
             "sources": {k: str(v) for k, v in sources.items()},
@@ -749,19 +936,27 @@ def build_graph(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def save_outputs(payload: dict[str, Any], output_dir: Path) -> None:
+    log_progress(f"saving outputs to {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "nodes").mkdir(exist_ok=True)
+    log_progress("saving pyHGT graph pickle")
     with (output_dir / "pyhgt_graph.pkl").open("wb") as f:
         dill.dump(payload["graph"], f)
+    log_progress("saving PyG HeteroData")
     torch.save(payload["hetero"], output_dir / "hetero_data.pt")
+    log_progress("saving flat HGT tensors")
     torch.save(payload["tensors"], output_dir / "hgt_tensors.pt")
     for node_type, df in payload["nodes"].items():
+        log_progress(f"saving node table: {node_type}, rows={len(df)}")
         df.drop(columns=["geometry"], errors="ignore").to_csv(output_dir / "nodes" / f"{node_type}.csv", index=False, encoding="utf-8-sig")
+    log_progress(f"saving edge table: rows={len(payload['edges'])}")
     payload["edges"].to_csv(output_dir / "edges.csv", index=False, encoding="utf-8-sig")
     summary = payload["summary"].copy()
     summary["edge_counts"] = {"|".join(k): int(v) for k, v in summary["edge_counts"].items()}
+    log_progress("saving manifest")
     (output_dir / "manifest.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=True, indent=2))
+    log_progress("save_outputs complete")
 
 
 def parse_args() -> argparse.Namespace:
@@ -775,9 +970,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--poi-csv", type=Path, default=None, help="Override POI CSV source.")
     parser.add_argument("--radius-m", type=float, default=2560.0, help="Station context radius; 512px * 10m / 2 by default.")
     parser.add_argument("--label-radius-m", type=float, default=500.0, help="Radius for weak station conflict labels.")
-    parser.add_argument("--conflict-link-m", type=float, default=150.0, help="Cross-group link distance for historic/daily connectivity.")
-    parser.add_argument("--conflict-threshold", type=float, default=0.15, help="Weak conflict label threshold on balance * connectivity.")
-    parser.add_argument("--min-conflict-nodes", type=int, default=2, help="Minimum nodes required in each group for a positive conflict label.")
+    parser.add_argument("--poi-influence-m", type=float, default=100.0, help="Distance-decay radius for daily/tourism/historic node intensity.")
+    parser.add_argument("--metro-influence-m", type=float, default=500.0, help="Distance-decay radius for metro flow pressure.")
+    parser.add_argument("--conflict-eps", type=float, default=1e-9, help="Numerical epsilon for harmonic daily-tourism mix.")
     parser.add_argument("--max-poi-per-station-group", type=int, default=120, help="Nearest POI cap per station and POI group.")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "outputs" / "preprocess" / "hgt_graph")
     return parser.parse_args()
