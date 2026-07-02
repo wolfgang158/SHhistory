@@ -12,6 +12,12 @@ This package contains the HGT real-time inference API delivery assets for the SH
 ## Git LFS Note
 The model and graph artifacts in this package are stored as Git LFS pointers in the repository. To obtain the real binary content, use Git LFS support (for example `git lfs pull`) in an environment that has Git LFS installed.
 
+## Inference Stub
+- inference_stub.py is a minimal API integration scaffold for the packaged assets.
+- The current package provides model/data assets, JSON I/O documentation, and an integration stub.
+- A fully runnable service still needs the original HGT model class and training code from the upstream project.
+- Do not treat this stub as a final production inference service.
+
 ## Contents
 - docs/HGT_API_JSON_IO_Bilingual_v2.md: API input/output specification
 - model/: trained HGT model artifacts

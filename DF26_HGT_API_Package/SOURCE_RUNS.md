@@ -10,3 +10,5 @@
 - Model checkpoint: DF26_HGT_API_Package/model/best_model.pt
 - Output prediction source: outputs/train/hgt_station_conflict/runs/20260702-092440/station_predictions.csv
 - API spec: DF26_HGT_API_Package/docs/HGT_API_JSON_IO_Bilingual_v2.md
+- Inference stub: DF26_HGT_API_Package/inference_stub.py
+- Dependency stub: DF26_HGT_API_Package/requirements_api_stub.txt
