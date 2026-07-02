@@ -1,0 +1,62 @@
+{
+  "radius_m": 2560.0,
+  "label_radius_m": 500.0,
+  "poi_influence_m": 100.0,
+  "metro_influence_m": 500.0,
+  "conflict_eps": 1e-09,
+  "feature_dim": 16,
+  "node_counts": {
+    "station": 537,
+    "building": 1071,
+    "road": 98402,
+    "poi": 183875,
+    "conservation_area": 12,
+    "admin_area": 389
+  },
+  "edge_counts": {
+    "admin_area|rev_inside_admin|station": 1012,
+    "building|inside_conservation|conservation_area": 534,
+    "building|rev_near_building|station": 13071,
+    "conservation_area|rev_inside_conservation|building": 534,
+    "conservation_area|rev_inside_conservation|station": 26,
+    "poi|rev_near_poi_daily|station": 414123,
+    "poi|rev_near_poi_other|station": 199741,
+    "poi|rev_near_poi_tour|station": 310307,
+    "poi|rev_near_poi_transport|station": 284803,
+    "road|rev_near_road|station": 467203,
+    "station|inside_admin|admin_area": 1012,
+    "station|inside_conservation|conservation_area": 26,
+    "station|near_building|building": 13071,
+    "station|near_poi_daily|poi": 414123,
+    "station|near_poi_other|poi": 199741,
+    "station|near_poi_tour|poi": 310307,
+    "station|near_poi_transport|poi": 284803,
+    "station|near_road|road": 467203
+  },
+  "total_edges": 3381640,
+  "station_conflict_label_counts": {
+    "1": 429,
+    "2": 108
+  },
+  "station_conflict_level_counts": {
+    "high": 108,
+    "medium": 429
+  },
+  "station_conflict_index": {
+    "min": 0.0,
+    "mean": 0.011296202293466466,
+    "max": 0.28561471177729303,
+    "q40": 0.0,
+    "q80": 0.015323512355362078
+  },
+  "weak_label_definition": "Station-level adaptation of daily-tourism mixed conflict potential: D=normalized daily POI distance-decay intensity; T=normalized tourism POI + 2*historic node intensity; M=normalized metro flow distance-decay pressure; N=normalized local road pressure proxy; conflict_index=(2DT/(D+T+eps))*(1-(1-M)*(1-N)); labels 0/1/2 are low/medium/high by 40%/80% quantiles.",
+  "crs": "EPSG:3857 features from WGS84/GCJ02-normalized source coordinates",
+  "sources": {
+    "stations": "/data1/fangxuebin/SHhistory/data/raw/metro_stations/shanghai_metro_stations_amap.csv",
+    "buildings": "/data1/fangxuebin/SHhistory/data/raw/historic_buildings/shanghai_excellent_historic_buildings_points.csv",
+    "conservation": "/data1/fangxuebin/SHhistory/data/raw/historic_conservation_areas/上海中心城区12片历史文化风貌区_保护边界_面积校准拟合.geojson",
+    "admin": "/data1/fangxuebin/SHhistory/data/raw/admin_boundary/shanghai_admin_boundary.geojson",
+    "roads": "/data1/fangxuebin/SHhistory/data/raw/road_segments/shanghai_road_segments.csv",
+    "poi": "/data1/fangxuebin/SHhistory/data/raw/poi/2026_poi_Shanghai.csv"
+  }
+}

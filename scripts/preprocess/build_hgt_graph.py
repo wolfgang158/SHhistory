@@ -10,13 +10,14 @@ It writes both a pyHGT Graph pickle and PyG HeteroData/tensor artifacts.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import dill
 import numpy as np
@@ -86,6 +87,22 @@ HISTORIC_KEYWORDS = (
     "公馆",
     "石库门",
 )
+
+
+def read_csv_dict_chunks(path: Path, chunksize: int) -> Iterable[pd.DataFrame]:
+    """Stream CSV rows with Python's csv parser to tolerate long quoted WKT fields."""
+    with path.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        rows: list[dict[str, str]] = []
+        for row in reader:
+            rows.append(row)
+            if len(rows) >= chunksize:
+                yield pd.DataFrame.from_records(rows)
+                rows = []
+        if rows:
+            yield pd.DataFrame.from_records(rows)
+
+
 HISTORIC_FLAG_COLUMNS = ("is_historic", "historic", "history", "历史", "历史标注", "是否历史", "历史节点")
 STATION_ENTRY_FLOW_COLUMNS = ("entry_flow", "in_flow", "daily_entry", "daily_in", "进站量", "日均进站量")
 STATION_EXIT_FLOW_COLUMNS = ("exit_flow", "out_flow", "daily_exit", "daily_out", "出站量", "日均出站量")
@@ -302,7 +319,7 @@ def load_roads(path: Path, station_xy: np.ndarray, radius_m: float) -> pd.DataFr
     tree = cKDTree(station_xy)
     rows = []
     total_seen = 0
-    for chunk_idx, chunk in enumerate(pd.read_csv(path, chunksize=20000), start=1):
+    for chunk_idx, chunk in enumerate(read_csv_dict_chunks(path, chunksize=20000), start=1):
         total_seen += len(chunk)
         for _, row in chunk.iterrows():
             try:
@@ -522,7 +539,10 @@ def compute_station_weak_labels(
         q40 = q80 = float(conflict[0]) if len(conflict) else 0.0
     else:
         q40, q80 = np.quantile(conflict, [0.4, 0.8])
-        labels = np.where(conflict >= q80, 2, np.where(conflict >= q40, 1, 0)).astype(np.int64)
+        labels = np.zeros(len(conflict), dtype=np.int64)
+        positive = conflict > 0.0
+        labels[positive & (conflict > q40)] = 1
+        labels[positive & (conflict >= q80)] = 2
 
     level_names = np.asarray(["low", "medium", "high"], dtype=object)
     rows = []

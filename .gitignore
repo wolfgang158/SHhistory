@@ -39,18 +39,7 @@ pip-wheel-metadata/
 *.log
 
 # Model checkpoints and training outputs
-checkpoints/
-checkpoint/
-outputs/
-output/
-runs/
-wandb/
-lightning_logs/
-*.pt
-*.pth
-*.ckpt
-*.pkl
-*.csv
+
 
 # Project-specific generated data and caches
 # data/raw/

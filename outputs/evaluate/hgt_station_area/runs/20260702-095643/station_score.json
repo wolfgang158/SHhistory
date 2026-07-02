@@ -1,0 +1,24 @@
+{
+  "station_local_idx": 530,
+  "id": "station:BV10039783",
+  "raw_id": "BV10039783",
+  "name": "淮海中路(地铁站)",
+  "split": "train",
+  "lon": 121.45981163294093,
+  "lat": 31.22197867160518,
+  "true_conflict_label": 1,
+  "pred_conflict_label": 1,
+  "pred_conflict_expected": 1.312742292881012,
+  "pred_conflict_confidence": 0.6809044480323792,
+  "true_historic_probability": 0.004254484549164772,
+  "pred_historic_probability": 0.017768651247024536,
+  "pred_historic_grade": "low",
+  "true_daily_probability": 0.11597763001918793,
+  "pred_daily_probability": 0.0907943993806839,
+  "pred_daily_grade": "low",
+  "conflict_probabilities": {
+    "prob_conflict_class_0": 0.003176603466272354,
+    "prob_conflict_class_1": 0.6809044480323792,
+    "prob_conflict_class_2": 0.3159189224243164
+  }
+}

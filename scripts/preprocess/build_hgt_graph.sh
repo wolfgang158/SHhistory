@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-#scripts/preprocess/build_hgt_graph.sh --radius-m 2560 --max-poi-per-station-group 120
-
+#  CUDA_VISIBLE_DEVICES=1 bash scripts/preprocess/build_hgt_graph.sh --radius-m 2560 --max-poi-per-station-group 120
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,7 +23,7 @@ echo "[build_hgt_graph] env=${HGT_CONDA_ENV}"
 echo "[build_hgt_graph] data-dir=${HGT_DATA_DIR}"
 echo "[build_hgt_graph] output-dir=${HGT_OUTPUT_DIR}"
 
-conda run -n "${HGT_CONDA_ENV}" python "${SCRIPT_DIR}/build_hgt_graph.py" \
+conda run --no-capture-output -n "${HGT_CONDA_ENV}" python "${SCRIPT_DIR}/build_hgt_graph.py" \
   --data-dir "${HGT_DATA_DIR}" \
   --output-dir "${HGT_OUTPUT_DIR}" \
   "${extra_args[@]}" \

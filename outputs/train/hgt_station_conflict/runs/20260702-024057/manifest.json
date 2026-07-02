@@ -1,0 +1,49 @@
+{
+  "graph_dir": "/data1/fangxuebin/SHhistory/outputs/preprocess/hgt_graph/runs/20260702-015536",
+  "tensors_path": "/data1/fangxuebin/SHhistory/outputs/preprocess/hgt_graph/runs/20260702-015536/hgt_tensors.pt",
+  "output_dir": "/data1/fangxuebin/SHhistory/outputs/train/hgt_station_conflict/runs/20260702-024057",
+  "best_epoch": 15,
+  "best_validation_score": 0.5945414938008087,
+  "test_metrics": {
+    "conflict_accuracy": 0.7654320987654321,
+    "conflict_macro_f1": 0.5777777777777777,
+    "historic_mae": 0.03139544278383255,
+    "historic_rmse": 0.05612696334719658,
+    "daily_mae": 0.06219838559627533,
+    "daily_rmse": 0.1037299633026123
+  },
+  "args": {
+    "graph_dir": null,
+    "graph_base_dir": "/data1/fangxuebin/SHhistory/outputs/preprocess/hgt_graph",
+    "output_dir": null,
+    "device": "cuda:0",
+    "epochs": 300,
+    "hidden_dim": 128,
+    "num_layers": 3,
+    "num_heads": 4,
+    "dropout": 0.15,
+    "lr": 0.0005,
+    "weight_decay": 0.0001,
+    "conflict_loss_weight": 1.0,
+    "historic_loss_weight": 1.5,
+    "daily_loss_weight": 1.5,
+    "regression_loss": "smooth_l1",
+    "selection_objective": "multitask",
+    "degree_score_weight": 1.5,
+    "train_ratio": 0.7,
+    "val_ratio": 0.15,
+    "seed": 42,
+    "patience": 100,
+    "conv_name": "hgt",
+    "use_rte": false,
+    "amp": false,
+    "no_mask_station_target_features": false,
+    "log_every": 5
+  },
+  "split_sizes": {
+    "train": 376,
+    "val": 80,
+    "test": 81
+  },
+  "num_classes": 3
+}
